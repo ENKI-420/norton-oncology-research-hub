@@ -1,184 +1,142 @@
 import streamlit as st
 import requests
+from openai import OpenAI
 import pandas as pd
 import os
-from openai import OpenAI
+import time
 from dotenv import load_dotenv
-from langchain.tools import DuckDuckGoSearchRun
-from langchain.chat_models import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
 
 # Load environment variables
 load_dotenv()
 
-# Epic FHIR Configuration
-FHIR_BASE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/"
-OAUTH_URL = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+# Sidebar Configuration
+with st.sidebar:
+    openai_api_key = os.getenv("OPENAI_API_KEY", "")
+    openai_api_key = st.text_input("OpenAI API Key", value=openai_api_key, key="chatbot_api_key", type="password")
+    "[Get an OpenAI API key](https://platform.openai.com/account/api-keys)"
+    "[View the source code](https://github.com/agiledefensesystems/norton-oncology-chatbot)"
+    "[Epic EHR Integration](https://www.epic.com/)"
 
-# OpenAI API Key
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+st.title("🔬 Norton Oncology AI Chatbot")
+st.caption("🚀 AI-driven oncology assistant powered by AIDEN & Epic EHR Integration")
 
-# Function to authenticate user with Epic (OAuth2)
-def authenticate_user(username, password):
-    auth_data = {
-        'grant_type': 'password',
-        'username': username,
-        'password': password,
-        'client_id': os.getenv("EPIC_CLIENT_ID", ""),
-        'client_secret': os.getenv("EPIC_CLIENT_SECRET", "")
-    }
-    response = requests.post(OAUTH_URL, data=auth_data)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    return None
+if "messages" not in st.session_state:
+    st.session_state["messages"] = [{"role": "assistant", "content": "Welcome to Norton Oncology AI. How can I assist you today?"}]
+    if len(st.session_state["messages"]) > 50:
+        st.session_state["messages"] = st.session_state["messages"][-50:]
 
-# Function to fetch Beaker Report (Diagnostic Reports) using the OAuth token
-def fetch_beaker_report(patient_id, auth_token):
-    headers = {
-        "Authorization": f"Bearer {auth_token}",
-        "Accept": "application/fhir+json"
-    }
-    report_url = f"{FHIR_BASE_URL}DiagnosticReport?patient={patient_id}"
-    response = requests.get(report_url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    return None
+for msg in st.session_state.messages:
+    st.chat_message(msg["role"]).write(msg["content"])
 
-# Function to process and analyze Beaker data
-def process_and_analyze_beaker_data(data):
-    records = data.get("entry", [])
-    processed_data = []
-    for record in records:
-        report = record.get("resource", {})
-        processed_data.append({
-            "Report ID": report.get("id", ""),
-            "Test Name": report.get("code", {}).get("text", ""),
-            "Date of Test": report.get("issued", ""),
-            "Result": report.get("result", ""),
-            "Status": report.get("status", "")
-        })
-    
-    df = pd.DataFrame(processed_data)
-    return df
+if prompt := st.chat_input():
+    if not openai_api_key:
+        st.info("Please add your OpenAI API key to continue.")
+        st.stop()
 
-# Function to generate AI-based treatment recommendations
-def generate_ai_recommendations(test_data):
-    if not OPENAI_API_KEY:
-        return "OpenAI API key not found. AI analysis unavailable."
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    
-    prompt = f"""
-    Given the following oncology test results, provide a summary and potential treatment recommendations:
-
-    {test_data.to_string(index=False)}
-
-    Include possible next steps, referrals, or clinical trials that might be relevant for this patient.
-    """
+    client = OpenAI(api_key=openai_api_key)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.chat_message("user").write(prompt)
 
     try:
-        response = client.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4-turbo",
-            prompt=prompt,
-            max_tokens=500
+            messages=st.session_state.messages
         )
-        return response.choices[0].text.strip()
+        msg = response.choices[0].message.content
+        st.session_state.messages.append({"role": "assistant", "content": msg})
+        st.chat_message("assistant").write(msg)
     except Exception as e:
-        return f"AI analysis error: {e}"
+        st.error(f"API request failed: {e}")
+        st.stop()
 
-# Function to call after successful authentication
-def fetch_and_process_patient_data(patient_id):
-    if 'auth_token' not in st.session_state:
-        st.error("User is not authenticated. Please log in first.")
-        return
-    
-    auth_token = st.session_state.auth_token
-    data = fetch_beaker_report(patient_id, auth_token)
-    
-    if data:
-        test_results = process_and_analyze_beaker_data(data)
-        st.write("### 🩺 Patient Beaker Test Results")
-        st.dataframe(test_results)
+# Epic EHR Authentication
+OAUTH_URL = os.getenv("EPIC_OAUTH_URL", "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token")
 
-        # AI-powered recommendation
-        st.write("### 🤖 AI-Generated Treatment Insights")
-        ai_response = generate_ai_recommendations(test_results)
-        st.write(ai_response)
-    else:
-        st.error("Failed to fetch Beaker report data.")
+def authenticate_epic(username, password):
+    try:
+        response = requests.post(OAUTH_URL, data={
+            "grant_type": "password",
+            "username": username,
+            "password": password
+        }, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Authentication failed: {e}")
+        return None
 
-# Streamlit User Interface for login
-def user_login():
-    st.subheader("🔐 Login to Epic (Optional)")
-    username = st.text_input("Epic Username")
-    password = st.text_input("Epic Password", type="password")
-    
-    if st.button("Login"):
-        token = authenticate_user(username, password)
-        if token:
-            st.session_state.auth_token = token
-            st.success("Login successful! You can now fetch Beaker data.")
+st.subheader("🩺 Quick Actions")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    epic_username = st.text_input("Epic Username")
+    epic_password = st.text_input("Epic Password", type="password")
+    if st.button("Sign In to Epic", disabled=st.session_state.get("authenticating", False)):
+        st.session_state["authenticating"] = True
+        token_data = authenticate_epic(epic_username, epic_password)
+        if token_data:
+            st.session_state["auth_token"] = token_data.get("access_token")
+            st.session_state["refresh_token"] = token_data.get("refresh_token")
+            st.session_state["token_expiry"] = token_data.get("expires_in") + time.time()
+            st.session_state["user_id"] = epic_username
+            st.success("Authenticated successfully!")
+        st.session_state["authenticating"] = False
+
+@st.cache_data(ttl=300)
+def get_patient_data(patient_id):
+    try:
+        response = requests.get("https://api.oncologyhub.com/patients/history", params={"patientId": patient_id}, verify=True)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching patient data: {e}")
+        return {}
+
+patient_id = st.text_input("Enter Epic Patient ID for History Retrieval")
+if st.button("Retrieve History"):
+    st.json(get_patient_data(patient_id))
+
+with col2:
+    if st.button("🧬 Run Genomic Analysis"):
+        st.write("Analyzing oncogenic mutations...")
+        response = requests.post("https://api.oncolo.ai/genomics/mutation_analysis", json={
+            "patient_id": patient_id,
+            "gene_variants": ["TP53", "BRCA1"],
+            "predicted_impact": "High-Risk"
+        })
+        st.json(response.json())
+
+with col3:
+    if st.button("🔗 Connect Clinical Trials"):
+        st.write("Fetching AI-matched clinical trials...")
+        response = requests.get("https://api.3oncologyresearchhub.com/v2/studies")
+        st.json(response.json())
+
+# Beaker Report Integration
+FHIR_BASE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/"
+
+def fetch_beaker_report(patient_id, auth_token):
+    headers = {"Authorization": f"Bearer {auth_token}", "Accept": "application/fhir+json"}
+    report_url = f"{FHIR_BASE_URL}DiagnosticReport?patient={patient_id}"
+    try:
+        response = requests.get(report_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching Beaker report: {e}")
+        return None
+
+with st.expander("📊 Fetch Beaker Report"):
+    patient_id = st.text_input("Enter Patient ID for Beaker Report")
+    if st.button("Fetch Report"):
+        auth_token = st.session_state.get("auth_token")
+        if auth_token:
+            report_data = fetch_beaker_report(patient_id, auth_token)
+            if report_data:
+                st.json(report_data)
+            else:
+                st.error("Failed to fetch Beaker report data.")
         else:
-            st.error("Authentication failed. Please check your credentials.")
+            st.error("User is not authenticated. Please sign in first.")
 
-# AI-Powered Oncology Chatbot
-def oncology_chatbot():
-    st.subheader("💬 AI-Powered Oncology Chatbot")
-    user_input = st.text_area("Ask me anything about cancer treatment, clinical trials, or genomic analysis...")
-
-    if st.button("Ask AI"):
-        if not OPENAI_API_KEY:
-            st.warning("Please set up your OpenAI API Key.")
-            return
-        
-        llm = ChatOpenAI(model_name="gpt-4-turbo", openai_api_key=OPENAI_API_KEY)
-        search_tool = DuckDuckGoSearchRun()
-        agent = initialize_agent(
-            tools=[search_tool],
-            llm=llm,
-            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            verbose=True,
-        )
-
-        with st.spinner("Thinking..."):
-            try:
-                response = agent.run(user_input)
-                st.write("### 🤖 AI Response")
-                st.write(response)
-            except Exception as e:
-                st.error(f"AI chatbot error: {e}")
-
-# Streamlit main function
-def main():
-    st.title("🔬 Norton Oncology - AI-Powered Chatbot & Beaker Report Analysis")
-
-    # AI Chatbot (Available Without Login)
-    oncology_chatbot()
-
-    # Optional Epic Login for Beaker Reports
-    if 'auth_token' in st.session_state:
-        st.success("You are logged into Epic!")
-        patient_id = st.text_input("Enter Patient ID for Beaker Report")
-        if st.button('Fetch Beaker Report'):
-            fetch_and_process_patient_data(patient_id)
-    else:
-        user_login()
-
-    # Adding Epic footer logo for assurance and security perception
-    st.markdown("""
-    <div style="position: fixed; bottom: 0; width: 100%; text-align: center; padding: 10px;">
-        <img src="https://vendorservices.epic.com/Scripts/React/media/footerLogo.a31a1d6cb66b67c7be72.png" 
-            alt="Epic Footer Logo" style="width: 150px;"/>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Adding Epic UserWeb logo for user trust
-    st.markdown("""
-    <div style="text-align: center; margin-top: 20px;">
-        <img src="https://vendorservices.epic.com/Content/images/UserWeb.png" 
-            alt="Epic UserWeb Logo" style="width: 200px;"/>
-    </div>
-    """, unsafe_allow_html=True)
-
-if __name__ == '__main__':
-    main()
+st.caption("🔗 Powered by Agile Defense Systems | Norton Oncology | Epic EHR | AI-Driven Precision Medicine")
