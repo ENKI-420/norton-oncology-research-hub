@@ -1,91 +1,135 @@
 import streamlit as st
 import requests
+import json
 from openai import OpenAI
-import pandas as pd
 import os
-import time
 from dotenv import load_dotenv
 from langchain.tools import DuckDuckGoSearchRun
 from langchain.chat_models import ChatOpenAI
 from langchain.agents import initialize_agent, AgentType
-from langchain.callbacks import StreamlitCallbackHandler
 
 # Load environment variables
 load_dotenv()
 
+# Epic FHIR Credentials
+EPIC_FHIR_BASE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/"
+OAUTH_URL = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+
 # Sidebar Configuration
 with st.sidebar:
     openai_api_key = os.getenv("OPENAI_API_KEY", "")
+    epic_client_id = os.getenv("EPIC_CLIENT_ID", "")
+    epic_client_secret = os.getenv("EPIC_CLIENT_SECRET", "")
+    
     openai_api_key = st.text_input("OpenAI API Key", value=openai_api_key, key="chatbot_api_key", type="password")
+    epic_client_id = st.text_input("Epic Client ID", value=epic_client_id, key="epic_client_id")
+    epic_client_secret = st.text_input("Epic Client Secret", value=epic_client_secret, key="epic_client_secret", type="password")
+
     st.markdown("[Get an OpenAI API key](https://platform.openai.com/account/api-keys)")
     st.markdown("[Epic EHR Integration](https://www.epic.com/)")
 
 st.title("🔬 Norton Oncology AI Chatbot")
 st.caption("🚀 AI-driven oncology assistant powered by AIDEN & Epic EHR Integration")
 
-# Initialize session state
-if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "Welcome to Norton Oncology AI. How can I assist you today?"}]
-    if len(st.session_state["messages"]) > 50:
-        st.session_state["messages"] = st.session_state["messages"][-50:]
-
-# Display chat messages
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-# User input
-if prompt := st.chat_input("Ask about cancer treatment, clinical trials, or genomic analysis..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
-
-    if not openai_api_key:
-        st.info("Please add your OpenAI API key to continue.")
-        st.stop()
-
-    # LangChain Search Agent
-    llm = ChatOpenAI(model_name="gpt-4-turbo", openai_api_key=openai_api_key, streaming=True)
-    search_tool = DuckDuckGoSearchRun()
-    agent = initialize_agent(
-        tools=[search_tool],
-        llm=llm,
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True,
-    )
-
-    # Process Query using LangChain & OpenAI
-    with st.spinner("Fetching oncology data..."):
-        try:
-            response = agent.run(prompt)
-        except Exception as e:
-            response = f"Error processing query: {e}"
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    st.chat_message("assistant").write(response)
-
-# Epic EHR Authentication (Optional)
-OAUTH_URL = os.getenv("EPIC_OAUTH_URL", "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token")
-
-def authenticate_epic(username, password):
+# Authenticate with Epic FHIR
+def authenticate_epic(client_id, client_secret):
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret
+    }
     try:
-        response = requests.post(OAUTH_URL, data={
-            "grant_type": "password",
-            "username": username,
-            "password": password
-        }, timeout=10)
+        response = requests.post(OAUTH_URL, data=payload)
+        response.raise_for_status()
+        return response.json().get("access_token")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Epic FHIR Authentication failed: {e}")
+        return None
+
+# Retrieve Patient Data from Epic FHIR
+def get_patient_data(patient_id, access_token):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    url = f"{EPIC_FHIR_BASE_URL}Patient/{patient_id}"
+    try:
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        st.error(f"Authentication failed: {e}")
+        st.error(f"Failed to fetch patient data: {e}")
         return None
 
-st.subheader("🩺 Quick Actions")
-col1, col2, col3 = st.columns(3)
+# Retrieve Clinical Notes
+def get_clinical_notes(patient_id, access_token):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    url = f"{EPIC_FHIR_BASE_URL}DocumentReference?patient={patient_id}"
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch clinical notes: {e}")
+        return None
 
-with col1:
-    epic_username = st.text_input("Epic Username")
-    epic_password = st.text_input("Epic Password", type="password")
-    if st.button("Sign In to Epic", disabled=st.session_state.get("authenticating", False)):
-        auth_data = authenticate_epic(epic_username, epic_password)
-        if auth_data:
-            st.success("Authenticated successfully!")
-            st.session_state["epic_auth"] = auth_data
+# Retrieve Genomic Report
+def get_genomic_report(patient_id, access_token):
+    headers = {"Authorization": f"Bearer {access_token}"}
+    url = f"{EPIC_FHIR_BASE_URL}Observation?patient={patient_id}&category=genomics"
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to fetch genomic data: {e}")
+        return None
+
+# User input for Patient ID
+patient_id = st.text_input("Enter Patient ID for Oncology Analysis")
+
+if patient_id:
+    # Authenticate with Epic FHIR
+    access_token = authenticate_epic(epic_client_id, epic_client_secret)
+    if access_token:
+        st.success("Epic FHIR Authentication Successful!")
+        
+        # Fetch and display patient details
+        st.subheader("🔍 Patient Details")
+        patient_data = get_patient_data(patient_id, access_token)
+        if patient_data:
+            st.json(patient_data)
+
+        # Fetch and display clinical notes
+        st.subheader("📄 Clinical Notes")
+        clinical_notes = get_clinical_notes(patient_id, access_token)
+        if clinical_notes:
+            st.json(clinical_notes)
+
+        # Fetch and display genomic report
+        st.subheader("🧬 Genomic Data")
+        genomic_report = get_genomic_report(patient_id, access_token)
+        if genomic_report:
+            st.json(genomic_report)
+
+# AI-Powered Clinical Recommendations
+if patient_id and access_token:
+    st.subheader("🤖 AI-Powered Treatment Recommendations")
+    
+    if openai_api_key:
+        llm = ChatOpenAI(model_name="gpt-4-turbo", openai_api_key=openai_api_key)
+        search_tool = DuckDuckGoSearchRun()
+        agent = initialize_agent(
+            tools=[search_tool],
+            llm=llm,
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=True,
+        )
+
+        query = f"Generate a treatment plan for a patient with ID {patient_id} based on clinical notes and genomic analysis."
+        with st.spinner("Generating AI-based oncology recommendations..."):
+            try:
+                response = agent.run(query)
+                st.write("### AI Recommendations")
+                st.write(response)
+            except Exception as e:
+                st.error(f"Error generating AI recommendations: {e}")
+    else:
+        st.warning("Please provide an OpenAI API key to enable AI-based recommendations.")
