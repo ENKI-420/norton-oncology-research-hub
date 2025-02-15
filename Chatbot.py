@@ -95,76 +95,13 @@ def authenticate_epic():
     st.markdown(f"[Click here to authenticate with Epic]({auth_url})")
     return None
     try:
-        response = requests.post(OAUTH_URL, data={
-            "grant_type": "password",
-            "username": username,
-            "password": password
-        }, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Authentication failed: {e}")
-        return None
-
-st.subheader("🩺 Quick Actions")
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    epic_username = st.text_input("Epic Username")
-    epic_password = st.text_input("Epic Password", type="password")
-    show_password = st.checkbox("Show Password")
-    if show_password:
-        epic_password = st.text_input("Epic Password", value=epic_password, type="default")
-    if st.button("Sign In to Epic", disabled=st.session_state.get("authenticating", False)):
-    st.session_state["authenticating"] = True
-    authenticate_epic()
-        st.session_state["authenticating"] = True
-        token_data = authenticate_epic(epic_username, epic_password)
-        if token_data:
-            st.session_state["auth_token"] = token_data.get("access_token")
-            st.session_state["refresh_token"] = token_data.get("refresh_token")
-            st.session_state["token_expiry"] = token_data.get("expires_in") + time.time()
-            st.session_state["user_id"] = epic_username
-            st.success("Authenticated successfully!")
-        st.session_state["authenticating"] = False
-
-@st.cache_data(ttl=300)
-def get_patient_data(patient_id):
-    try:
-        import asyncio
-import httpx
-
-async def fetch_patient_history(patient_id):
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://api.oncologyhub.com/patients/history", params={"patientId": patient_id}, timeout=10)
-        response.raise_for_status()
-        return response.json()
-
-@st.cache_data(ttl=300)
-def get_patient_data(patient_id):
-    return asyncio.run(fetch_patient_history(patient_id))
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching patient data: {e}")
-        return {}
-
-patient_id = st.text_input("Enter Epic Patient ID for History Retrieval")
-if st.button("Retrieve History"):
-    with st.spinner("Fetching patient history..."):
-        st.json(get_patient_data(patient_id))
-
-with col2:
-    if st.button("🧬 Run Genomic Analysis"):
-    with st.spinner("Running genomic analysis..."):
-        try:
-                    response = requests.post("https://api.oncolo.ai/genomics/mutation_analysis", json={
-                "patient_id": patient_id,
-                "gene_variants": ["TP53", "BRCA1"],
-                "predicted_impact": "High-Risk"
-            })
-            response.raise_for_status()
-            st.json(response.json())
+        response = requests.post("https://api.oncolo.ai/genomics/mutation_analysis", json={
+    "patient_id": patient_id,
+    "gene_variants": ["TP53", "BRCA1"],
+    "predicted_impact": "High-Risk"
+})
+response.raise_for_status()
+st.json(response.json())
         except requests.exceptions.RequestException as e:
             st.error(f"Error fetching genomic analysis: {e}")
         st.write("Analyzing oncogenic mutations...")
@@ -194,11 +131,20 @@ def fetch_beaker_report(patient_id, auth_token):
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching Beaker report: {e}")
         return None
+    headers = {"Authorization": f"Bearer {auth_token}", "Accept": "application/fhir+json"}
+    report_url = f"{FHIR_BASE_URL}DiagnosticReport?patient={patient_id}"
+    try:
+        response = requests.get(report_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching Beaker report: {e}")
+        return None
 
 with st.expander("📊 Fetch Beaker Report"):
     patient_id = st.text_input("Enter Patient ID for Beaker Report")
     if st.button("Fetch Report"):
-    with st.toast("Fetching Beaker report...", icon="🔄"):
+    with st.spinner("Fetching Beaker report..."):, icon="🔄"):
         try:
                     auth_token = st.session_state.get("auth_token")
             if not auth_token or ("token_expiry" in st.session_state and time.time() > st.session_state["token_expiry"]):
