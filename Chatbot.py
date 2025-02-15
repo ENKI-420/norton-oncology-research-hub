@@ -17,6 +17,44 @@ with st.sidebar:
     "[View the source code](https://github.com/agiledefensesystems/norton-oncology-chatbot)"
     "[Epic EHR Integration](https://www.epic.com/)"
 
+st.markdown("""
+    <div id="NavBarLogos">
+        <ul class="external-logos">
+            <li class="external-logo" title="Visit Epic.com">
+                <a href="https://www.epic.com/" class="oe-nav-link external-sites-epic"></a>
+            </li>
+            <li class="external-logo" title="Visit EpicShare">
+                <a href="https://www.epicshare.org/" class="oe-nav-link external-sites-epicshare oe-nav-link-header-selected"></a>
+            </li>
+            <li class="external-logo" title="Visit Epic Research">
+                <a href="https://epicresearch.org/" class="oe-nav-link external-sites-epicresearch"></a>
+            </li>
+            <li class="external-logo" title="Visit Cosmos">
+                <a href="https://cosmos.epic.com/" class="oe-nav-link external-sites-cosmos"></a>
+            </li>
+            <li class="external-logo" title="Visit MyChart">
+                <a href="https://mychart.org/" class="oe-nav-link external-sites-mychart"></a>
+            </li>
+            <li class="external-logo" title="Visit open.epic">
+                <a href="https://open.epic.com" class="oe-nav-link external-sites-openepic"></a>
+            </li>
+            <li class="external-logo" title="Visit UserWeb">
+                <a href="https://userweb.epic.com" class="oe-nav-link external-sites-userweb"></a>
+            </li>
+            <li class="external-logo" title="Visit Showroom">
+                <a href="https://vendorservices.epic.com/Showroom" class="oe-nav-link external-sites-showroom"></a>
+            </li>
+        </ul>
+    </div>
+
+    <div class="page">
+        <div id="msgBox"><div id="msgTitle"></div><div id="msgBody"></div></div>
+        <a class="homelink" href="/">
+            <img class="openEpicLogo" alt="hanging open sign" src="/Content/Images/logo.png?version=R41429">
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+
 st.title("🔬 Norton Oncology AI Assistant")
 st.caption("🚀 AI-driven oncology assistant powered by Agile Defense Systems | AIDEN & Epic EHR Integration")
 
