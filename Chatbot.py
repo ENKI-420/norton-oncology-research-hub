@@ -135,5 +135,20 @@ if st.button("Find Clinical Trials"):
         st.json(trial_data)
     else:
         st.error("No trials found.")
+   # Adding Epic footer logo for assurance and security perception
+    st.markdown("""
+    <div style="position: fixed; bottom: 0; width: 100%; text-align: center; padding: 10px;">
+        <img src="https://vendorservices.epic.com/Scripts/React/media/footerLogo.a31a1d6cb66b67c7be72.png" 
+            alt="Epic Footer Logo" style="width: 150px;"/>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Adding Epic UserWeb logo for user trust
+    st.markdown("""
+    <div style="text-align: center; margin-top: 20px;">
+        <img src="https://vendorservices.epic.com/Content/images/UserWeb.png" 
+            alt="Epic UserWeb Logo" style="width: 200px;"/>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.caption("🔗 Powered by Agile Defense Systems | Norton Oncology | Epic EHR | AI-Driven Precision Medicine")
