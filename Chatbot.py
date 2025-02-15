@@ -4,6 +4,9 @@ import pandas as pd
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
+from langchain.tools import DuckDuckGoSearchRun
+from langchain.chat_models import ChatOpenAI
+from langchain.agents import initialize_agent, AgentType
 
 # Load environment variables
 load_dotenv()
@@ -106,7 +109,7 @@ def fetch_and_process_patient_data(patient_id):
 
 # Streamlit User Interface for login
 def user_login():
-    st.subheader("🔐 Login to Epic")
+    st.subheader("🔐 Login to Epic (Optional)")
     username = st.text_input("Epic Username")
     password = st.text_input("Epic Password", type="password")
     
@@ -118,12 +121,44 @@ def user_login():
         else:
             st.error("Authentication failed. Please check your credentials.")
 
+# AI-Powered Oncology Chatbot
+def oncology_chatbot():
+    st.subheader("💬 AI-Powered Oncology Chatbot")
+    user_input = st.text_area("Ask me anything about cancer treatment, clinical trials, or genomic analysis...")
+
+    if st.button("Ask AI"):
+        if not OPENAI_API_KEY:
+            st.warning("Please set up your OpenAI API Key.")
+            return
+        
+        llm = ChatOpenAI(model_name="gpt-4-turbo", openai_api_key=OPENAI_API_KEY)
+        search_tool = DuckDuckGoSearchRun()
+        agent = initialize_agent(
+            tools=[search_tool],
+            llm=llm,
+            agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=True,
+        )
+
+        with st.spinner("Thinking..."):
+            try:
+                response = agent.run(user_input)
+                st.write("### 🤖 AI Response")
+                st.write(response)
+            except Exception as e:
+                st.error(f"AI chatbot error: {e}")
+
 # Streamlit main function
 def main():
-    st.title("🔬 Norton Oncology - AI-Enhanced Beaker Report Analysis")
+    st.title("🔬 Norton Oncology - AI-Powered Chatbot & Beaker Report Analysis")
 
+    # AI Chatbot (Available Without Login)
+    oncology_chatbot()
+
+    # Optional Epic Login for Beaker Reports
     if 'auth_token' in st.session_state:
-        patient_id = st.text_input("Enter Patient ID")
+        st.success("You are logged into Epic!")
+        patient_id = st.text_input("Enter Patient ID for Beaker Report")
         if st.button('Fetch Beaker Report'):
             fetch_and_process_patient_data(patient_id)
     else:
