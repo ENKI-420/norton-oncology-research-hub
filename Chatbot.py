@@ -18,39 +18,38 @@ with st.sidebar:
     "[Epic EHR Integration](https://www.epic.com/)"
 
 st.markdown("""
-    <div id="NavBarLogos">
-        <ul class="external-logos">
-            <li class="external-logo" title="Visit Epic.com">
-                <a href="https://www.epic.com/" class="oe-nav-link external-sites-epic"></a>
+    <div id=\"NavBarLogos\">
+        <ul class=\"external-logos\">
+            <li class=\"external-logo\" title=\"Visit Epic.com\">
+                <a href=\"https://www.epic.com/\" class=\"oe-nav-link external-sites-epic\"></a>
             </li>
-            <li class="external-logo" title="Visit EpicShare">
-                <a href="https://www.epicshare.org/" class="oe-nav-link external-sites-epicshare oe-nav-link-header-selected"></a>
+            <li class=\"external-logo\" title=\"Visit EpicShare\">
+                <a href=\"https://www.epicshare.org/\" class=\"oe-nav-link external-sites-epicshare oe-nav-link-header-selected\"></a>
             </li>
-            <li class="external-logo" title="Visit Epic Research">
-                <a href="https://epicresearch.org/" class="oe-nav-link external-sites-epicresearch"></a>
+            <li class=\"external-logo\" title=\"Visit Epic Research\">
+                <a href=\"https://epicresearch.org/\" class=\"oe-nav-link external-sites-epicresearch\"></a>
             </li>
-            <li class="external-logo" title="Visit Cosmos">
-                <a href="https://cosmos.epic.com/" class="oe-nav-link external-sites-cosmos"></a>
+            <li class=\"external-logo\" title=\"Visit Cosmos\">
+                <a href=\"https://cosmos.epic.com/\" class=\"oe-nav-link external-sites-cosmos\"></a>
             </li>
-            <li class="external-logo" title="Visit MyChart">
-                <a href="https://mychart.org/" class="oe-nav-link external-sites-mychart"></a>
+            <li class=\"external-logo\" title=\"Visit MyChart\">
+                <a href=\"https://mychart.org/\" class=\"oe-nav-link external-sites-mychart\"></a>
             </li>
-            <li class="external-logo" title="Visit open.epic">
-                <a href="https://open.epic.com" class="oe-nav-link external-sites-openepic"></a>
+            <li class=\"external-logo\" title=\"Visit open.epic\">
+                <a href=\"https://open.epic.com\" class=\"oe-nav-link external-sites-openepic\"></a>
             </li>
-            <li class="external-logo" title="Visit UserWeb">
-                <a href="https://userweb.epic.com" class="oe-nav-link external-sites-userweb"></a>
+            <li class=\"external-logo\" title=\"Visit UserWeb\">
+                <a href=\"https://userweb.epic.com\" class=\"oe-nav-link external-sites-userweb\"></a>
             </li>
-            <li class="external-logo" title="Visit Showroom">
-                <a href="https://vendorservices.epic.com/Showroom" class="oe-nav-link external-sites-showroom"></a>
+            <li class=\"external-logo\" title=\"Visit Showroom\">
+                <a href=\"https://vendorservices.epic.com/Showroom\" class=\"oe-nav-link external-sites-showroom\"></a>
             </li>
         </ul>
     </div>
-
-    <div class="page">
-        <div id="msgBox"><div id="msgTitle"></div><div id="msgBody"></div></div>
-        <a class="homelink" href="/">
-            <img class="openEpicLogo" alt="hanging open sign" src="/Content/Images/logo.png?version=R41429">
+    <div class=\"page\">
+        <div id=\"msgBox\"><div id=\"msgTitle\"></div><div id=\"msgBody\"></div></div>
+        <a class=\"homelink\" href=\"/\">
+            <img class=\"openEpicLogo\" alt=\"hanging open sign\" src=\"/Content/Images/logo.png?version=R41429\">
         </a>
     </div>
     """, unsafe_allow_html=True)
@@ -144,7 +143,7 @@ def fetch_beaker_report(patient_id, auth_token):
 with st.expander("📊 Fetch Beaker Report"):
     patient_id = st.text_input("Enter Patient ID for Beaker Report")
     if st.button("Fetch Report"):
-    with st.spinner("Fetching Beaker report..."):, icon="🔄"):
+    with st.spinner("Fetching Beaker report...", icon="🔄"):
         try:
                     auth_token = st.session_state.get("auth_token")
             if not auth_token or ("token_expiry" in st.session_state and time.time() > st.session_state["token_expiry"]):
@@ -156,36 +155,3 @@ with st.expander("📊 Fetch Beaker Report"):
                 "refresh_token": refresh_token
             })
             refresh_response.raise_for_status()
-            new_token_data = refresh_response.json()
-            st.session_state["auth_token"] = new_token_data.get("access_token")
-            st.session_state["token_expiry"] = new_token_data.get("expires_in") + time.time()
-            st.success("Session refreshed.")
-        except requests.exceptions.RequestException as e:
-            st.error(f"Session expired. Please sign in again: {e}")
-            return
-                report_data = fetch_beaker_report(patient_id, auth_token)
-                if report_data:
-                    st.json(report_data)
-                else:
-                    st.error("Failed to fetch Beaker report data.")
-            else:
-                st.error("User is not authenticated. Please sign in first.")
-        except requests.exceptions.RequestException as e:
-            st.error(f"Error fetching Beaker report: {e}")
-            if report_data:
-                st.json(report_data)
-            else:
-                st.error("Failed to fetch Beaker report data.")
-        else:
-            st.error("User is not authenticated. Please sign in first.")
-        auth_token = st.session_state.get("auth_token")
-        if auth_token:
-            report_data = fetch_beaker_report(patient_id, auth_token)
-            if report_data:
-                st.json(report_data)
-            else:
-                st.error("Failed to fetch Beaker report data.")
-        else:
-            st.error("User is not authenticated. Please sign in first.")
-
-st.caption("🔗 Powered by Agile Defense Systems | Norton Oncology | Epic EHR | AI-Driven Precision Medicine")
