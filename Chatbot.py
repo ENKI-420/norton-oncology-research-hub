@@ -4,7 +4,9 @@ import pandas as pd
 import os
 import time
 from dotenv import load_dotenv
+import openai
 from openai import OpenAI
+import openai.error  # for APIConnectionError and other exceptions
 
 # Load environment variables
 load_dotenv()
@@ -12,12 +14,9 @@ load_dotenv()
 # Constants
 FHIR_BASE_URL = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/"
 OAUTH_URL = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token"
+TRIALS_API_URL = "https://api.3oncologyresearchhub.com/v2/studies"  # Placeholder or Mock
 
-# NOTE: Placeholder Trial API URL
-# If you haven't built the real Trials API yet, the code will fallback to mock data.
-TRIALS_API_URL = "https://api.3oncologyresearchhub.com/v2/studies"
-
-# Load OpenAI API Key from .env
+# Retrieve OpenAI API key from environment
 openai_api_key = os.getenv("OPENAI_API_KEY", "")
 
 # -------------------------------------------
@@ -67,12 +66,11 @@ with st.sidebar:
     st.markdown("[View the Source Code](https://github.com/agiledefensesystems/norton-oncology-chatbot)")
     st.markdown("[Epic EHR Integration](https://www.epic.com/)")
 
-# Display selected module
 st.title(f"🚀 {selected_option}")
 st.caption("AI-driven oncology assistant for research, clinical insights, and precision medicine.")
 
 # -------------------------------------------
-# Authentication & Data Fetching
+# Epic Authentication & Data Fetching
 # -------------------------------------------
 def authenticate_epic(username, password):
     """Authenticate to Epic and return a valid token, or None if failed."""
@@ -111,21 +109,47 @@ def process_beaker_report(report_data):
     return pd.DataFrame(processed)
 
 # -------------------------------------------
+# OpenAI Helper
+# -------------------------------------------
+def get_ai_chat_response(user_prompt: str, api_key: str) -> str:
+    """
+    Safely get a GPT-based response from OpenAI. Returns a short string 
+    if an error occurs, letting the app handle feedback gracefully.
+    """
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        return response.choices[0].message.content
+
+    except openai.error.APIConnectionError:
+        st.error("❌ Unable to connect to the OpenAI API. Check your API key/network.")
+        return "Connection Error"
+
+    except openai.error.OpenAIError as e:
+        st.error(f"❌ OpenAI Error: {str(e)}")
+        return "OpenAI Error"
+
+    except Exception as general_exception:
+        st.error(f"❌ An unexpected error occurred: {general_exception}")
+        return "Unexpected Error"
+
+# -------------------------------------------
 # AI-Powered Treatment Suggestions
 # -------------------------------------------
-def generate_ai_treatment_suggestions(test_results):
-    """Use OpenAI's GPT-based model to generate suggestions based on test results."""
-    client = OpenAI(api_key=openai_api_key)
+def generate_ai_treatment_suggestions(test_results_df):
+    """
+    Use OpenAI's GPT-based model to generate suggestions based on test results.
+    Error handling is built into get_ai_chat_response().
+    """
+    formatted_results = test_results_df.to_string(index=False)
     prompt = (
         "Analyze these oncology test results and provide treatment suggestions:\n"
-        f"{test_results.to_string(index=False)}"
+        f"{formatted_results}"
     )
-    response = client.completions.create(
-        model="gpt-4-turbo",
-        prompt=prompt,
-        max_tokens=500
-    )
-    return response.choices[0].text.strip()
+    return get_ai_chat_response(prompt, openai_api_key)
 
 # -------------------------------------------
 # Clinical Trials (Placeholder or Mock)
@@ -143,7 +167,7 @@ def fetch_clinical_trials():
             st.warning("Received an unexpected status code from the Trials API. Using mock data instead.")
     except requests.exceptions.RequestException:
         st.warning("Failed to connect to the Trials API (placeholder). Using mock data instead.")
-    
+
     # Mock data to demonstrate table rendering
     mock_data = {
         "trials": [
@@ -184,13 +208,10 @@ st.subheader("💬 AI-Powered Oncology Chatbot")
 user_prompt = st.text_area("Ask a question about cancer treatment, trials, or genomic analysis")
 if st.button("Get AI Response"):
     if user_prompt.strip():
-        client = OpenAI(api_key=openai_api_key)
-        response = client.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[{"role": "user", "content": user_prompt}]
-        )
-        st.write("### 🤖 AI Response")
-        st.write(response.choices[0].message.content)
+        ai_response = get_ai_chat_response(user_prompt, openai_api_key)
+        if ai_response not in ["Connection Error", "OpenAI Error", "Unexpected Error"]:
+            st.write("### 🤖 AI Response")
+            st.write(ai_response)
     else:
         st.warning("Please enter a question before asking for a response.")
 
@@ -208,7 +229,8 @@ if st.button("Fetch Report"):
             st.dataframe(test_results)
             st.write("### 🤖 AI-Powered Treatment Insights")
             ai_response = generate_ai_treatment_suggestions(test_results)
-            st.write(ai_response)
+            if ai_response not in ["Connection Error", "OpenAI Error", "Unexpected Error"]:
+                st.write(ai_response)
     else:
         st.error("Please log in to Epic first.")
 
