@@ -6,7 +6,8 @@ import time
 from dotenv import load_dotenv
 import openai
 from openai import OpenAI
-import openai.error  # for APIConnectionError and other exceptions
+import openai.error  # Ensure this line works
+
 
 # Load environment variables
 load_dotenv()
