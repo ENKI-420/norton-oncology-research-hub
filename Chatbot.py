@@ -83,10 +83,79 @@ def process_beaker_report(report_data):
     ]
     return pd.DataFrame(processed) if processed else pd.DataFrame(columns=["Test Name", "Result", "Status"])
 
-# AI Treatment Suggestions
 def generate_ai_treatment_suggestions(test_results):
     if not openai_api_key:
         st.error("OpenAI API Key is missing. Please provide a valid key.")
         return None
-    client =
+    
+    client = OpenAI(api_key=openai_api_key)
+    
+    try:
+        # Convert DataFrame to formatted string
+        results_text = "\n".join(
+            [f"- {row['Test Name']}: {row['Result']} ({row['Status']})" 
+             for _, row in test_results.iterrows()]
+        )
+        
+        # Create structured prompt
+        prompt = f"""As an oncology AI consultant, analyze these lab results and provide treatment suggestions:
+        
+        {results_text}
+        
+        Consider these aspects:
+        1. Potential targeted therapies
+        2. Relevant clinical trials
+        3. Precision medicine approaches
+        4. Critical result flags
+        5. Recommended follow-up tests
+        
+        Format response in markdown with clear sections."""
+        
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": "You are an oncology expert providing research-focused treatment suggestions. Include scientific rationales."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=700
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        st.error(f"AI Analysis Failed: {str(e)}")
+        return None
 
+# Main app logic for Beaker Report Analysis
+if selected_option == "Beaker Report Analysis":
+    st.subheader("🔬 Beaker Lab Report Analysis")
+    epic_username = st.text_input("Epic Username")
+    epic_password = st.text_input("Epic Password", type="password")
+    patient_id = st.text_input("Patient ID")
+
+    if st.button("Fetch Beaker Report"):
+        if not all([epic_username, epic_password, patient_id]):
+            st.warning("Please fill all Epic authentication fields.")
+        else:
+            with st.spinner("Authenticating with Epic..."):
+                auth_token = authenticate_epic(epic_username, epic_password)
+            
+            if auth_token:
+                with st.spinner("Fetching Beaker Report..."):
+                    report_data = fetch_beaker_report(patient_id, auth_token)
+                
+                if report_data:
+                    df_report = process_beaker_report(report_data)
+                    st.success("✅ Beaker Report Retrieved!")
+                    st.dataframe(df_report, use_container_width=True)
+
+                    # Generate AI insights
+                    with st.spinner("🧠 Analyzing results with AI..."):
+                        ai_response = generate_ai_treatment_suggestions(df_report)
+                        
+                        if ai_response:
+                            st.subheader("💡 AI-Powered Oncology Insights")
+                            st.markdown(ai_response)
+                            st.divider()
+                            st.caption("⚠️ Note: These suggestions are research-focused and should be validated by clinical staff.")
