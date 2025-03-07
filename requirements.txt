@@ -9,3 +9,4 @@ langchain-community
 python-dotenv
 requests
 pandas
+langchain-community>=0.3.19
